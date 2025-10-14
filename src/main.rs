@@ -1,24 +1,71 @@
 #![no_std]
 #![no_main]
+#![allow(static_mut_refs)]
 
-use core::fmt::Write;
-use bootloader_x86_64_common::framebuffer::FrameBufferWriter;
-use bootloader_api::{entry_point, BootInfo};
+extern crate alloc;
 
+use kernel::{println, serial_println as sprintln};
+use bootloader_api::{entry_point, 
+    info::BootInfo, 
+    config::{ BootloaderConfig, Mapping }
+};
 use core::panic::PanicInfo;
 
-use core::arch::asm;
+use kernel::BOOT_INFO;
 
-entry_point!(kernel_main);
+// use x86_64::structures::paging::{Page, PageTable};
+use x86_64::VirtAddr;
+
+use alloc::vec;
+use kernel::task::executor::Executor;
+use kernel::task::keyboard;
+// use blog_os::task::simple_executor::SimpleExecutor;
+use kernel::task::Task;
+
+
+pub static BOOTLOADER_CONFIG: BootloaderConfig = {
+    let mut config = BootloaderConfig::new_default();
+    config.kernel_stack_size = 90 * 1024;
+    config.mappings.physical_memory = Some(Mapping::FixedAddress(0x180_0000_0000));
+    config
+};
+
+entry_point!(kernel_main, config = &BOOTLOADER_CONFIG);
 
 fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
-    kernel::serial_println!("!!!!!!!!! KERNEL STARTED !!!!!!!!");
+    sprintln!("!!!!!!!!! KERNEL STARTED !!!!!!!!");
+    unsafe { BOOT_INFO = Some(boot_info) };
+    // sprintln!("Memory starts at: {:#x?}", unsafe { BOOT_INFO.as_deref_mut().unwrap() }.memory_regions.as_ref());
 
-    let framebuffer = boot_info.framebuffer.as_mut()
-        .expect("Framebuffer not found");
 
-    let info = framebuffer.info();
-    let buffer = framebuffer.buffer_mut();
+    use kernel::allocator;
+    use kernel::memory::{self, BootInfoFrameAllocator};
+
+    kernel::init();
+
+    let boot_info = unsafe { BOOT_INFO.as_deref_mut().unwrap() };
+    let phys_mem_offset = VirtAddr::new(*boot_info.physical_memory_offset.as_ref().expect("physical_memory_offset not provided"));
+    println!("Physical memory offset: {:#x}", phys_mem_offset);
+    println!("Kernel address: {:#x}", boot_info.kernel_addr);
+    println!("Kernel end address: {:#x}", boot_info.kernel_addr + boot_info.kernel_len);
+    println!("Kernel image offset: {:#x}", boot_info.kernel_image_offset);
+
+    let mut mapper = unsafe { memory::init(phys_mem_offset) };
+    let mut frame_allocator = unsafe { BootInfoFrameAllocator::init(&boot_info.memory_regions) };
+
+    allocator::init_heap(&mut mapper, &mut frame_allocator).expect("heap initialization failed");
+
+    let v = vec![1, 2, 3];
+    println!("vec at {:p}", v.as_ptr());
+    for n in v {
+        println!("vec value: {}", n);
+    }
+
+    // let framebuffer = unsafe { BOOT_INFO.get_mut().unwrap().framebuffer.as_mut()
+    //     .expect("Framebuffer not found") };
+
+    // let info = framebuffer.info();
+    // let buffer = framebuffer.buffer_mut();
 
     // For reusing bootloader's logger.
     // bootloader_x86_64_common::init_logger(
@@ -33,11 +80,19 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 
     // For raw writes reusing the buffer.
 
-    sleep_ms(5000); // Sleep for 5 seconds before re-initializing the logger.
+    // sleep_ms(1000); // Sleep for 1 seconds before re-initializing the logger.
+    
+    // let mut writer = WRITER.lock();
+    // writeln!(writer, "Logger re-initialized.").unwrap();
+    println!("Logger re-initialized.");
+    println!("Hello World{}", "!");
 
-    let mut writer = FrameBufferWriter::new(buffer, info);
-    writeln!(writer, "Logger re-initialized.").unwrap();
+    let mut executor = Executor::new();
+    executor.spawn(Task::new(example_task()));
+    executor.spawn(Task::new(keyboard::print_keypresses()));
+    executor.run();
 
+    #[allow(unused)]
     loop {}
 }
 
@@ -58,9 +113,25 @@ pub fn sleep_ms(ms: u64) {
         core::hint::spin_loop();
     }
 }
+
 #[cfg(not(test))]
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
-    // println!("{}", _info);
+    kernel::serial_println!("{}", _info);
     kernel::hlt_loop()
+}
+
+#[cfg(test)]
+#[panic_handler]
+fn panic(_info: &PanicInfo) -> ! {
+    kernel::test_panic_handler(_info)
+}
+
+async fn async_number() -> u32 {
+    42
+}
+
+async fn example_task() {
+    let number = async_number().await;
+    println!("async number: {}", number);
 }
