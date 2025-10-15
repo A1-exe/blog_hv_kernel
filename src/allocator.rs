@@ -71,7 +71,7 @@ pub fn init_heap(
             .ok_or(MapToError::FrameAllocationFailed)?;
 
         let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
-        crate::println!("Mapping page {:#?} to frame {:#?}", page, frame);
+        // crate::println!("Mapping page {:#?} to frame {:#?}", page, frame);
         unsafe { mapper.map_to(page, frame, flags, frame_allocator)?.flush() };
     }
 

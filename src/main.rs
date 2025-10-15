@@ -61,31 +61,25 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         println!("vec value: {}", n);
     }
 
-    // let framebuffer = unsafe { BOOT_INFO.get_mut().unwrap().framebuffer.as_mut()
-    //     .expect("Framebuffer not found") };
+    println!("\n== CHECKING CPU ==");
+    // Check if AMD-V is enabled
+    let cpuid = raw_cpuid::CpuId::new();
+    if let Some(vi) = cpuid.get_vendor_info() {
+        if vi.as_str() == "AuthenticAMD" {
+            println!("AMD CPU detected");
 
-    // let info = framebuffer.info();
-    // let buffer = framebuffer.buffer_mut();
-
-    // For reusing bootloader's logger.
-    // bootloader_x86_64_common::init_logger(
-    //     buffer,
-    //     info,
-    //     bootloader_boot_config::LevelFilter::Info,
-    //     true,
-    //     true
-    // );
-    
-    // log::info!("Logger re-initialized.");
-
-    // For raw writes reusing the buffer.
+            if let Some(_) = cpuid.get_svm_info(){
+                println!("AMD-V is enabled");
+            } else {
+                println!("AMD-V is not enabled");
+            }
+        } else {
+            println!("Non-AMD CPU detected");
+        }
+    }
+    println!("== COMPLETE ==\n");
 
     // sleep_ms(1000); // Sleep for 1 seconds before re-initializing the logger.
-    
-    // let mut writer = WRITER.lock();
-    // writeln!(writer, "Logger re-initialized.").unwrap();
-    println!("Logger re-initialized.");
-    println!("Hello World{}", "!");
 
     let mut executor = Executor::new();
     executor.spawn(Task::new(example_task()));
