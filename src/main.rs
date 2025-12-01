@@ -13,15 +13,13 @@ use core::panic::PanicInfo;
 
 use kernel::BOOT_INFO;
 
-// use x86_64::structures::paging::{Page, PageTable};
 use x86_64::VirtAddr;
+use x86_64::PhysAddr;
 
 use alloc::vec;
 use kernel::task::executor::Executor;
 use kernel::task::keyboard;
-// use blog_os::task::simple_executor::SimpleExecutor;
 use kernel::task::Task;
-
 
 pub static BOOTLOADER_CONFIG: BootloaderConfig = {
     let mut config = BootloaderConfig::new_default();
@@ -35,8 +33,7 @@ entry_point!(kernel_main, config = &BOOTLOADER_CONFIG);
 fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     sprintln!("!!!!!!!!! KERNEL STARTED !!!!!!!!");
     unsafe { BOOT_INFO = Some(boot_info) };
-    // sprintln!("Memory starts at: {:#x?}", unsafe { BOOT_INFO.as_deref_mut().unwrap() }.memory_regions.as_ref());
-
+    sprintln!("Memory starts at: {:#x?}", unsafe { BOOT_INFO.as_deref_mut().unwrap() }.memory_regions.as_ref());
 
     use kernel::allocator;
     use kernel::memory::{self, BootInfoFrameAllocator};
@@ -61,25 +58,26 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         println!("vec value: {}", n);
     }
 
-    println!("\n== CHECKING CPU ==");
+    println!("\n== CHECK + ENABLE VIRT ==");
     // Check if AMD-V is enabled
-    let cpuid = raw_cpuid::CpuId::new();
-    if let Some(vi) = cpuid.get_vendor_info() {
-        if vi.as_str() == "AuthenticAMD" {
-            println!("AMD CPU detected");
-
-            if let Some(_) = cpuid.get_svm_info(){
-                println!("AMD-V is enabled");
-            } else {
-                println!("AMD-V is not enabled");
-            }
-        } else {
-            println!("Non-AMD CPU detected");
-        }
+    if kernel::svm::svm_support() {
+        println!("SVM is supported!");
+        kernel::svm::enable_svm();
+        println!("SVM enabled.");
     }
     println!("== COMPLETE ==\n");
 
-    // sleep_ms(1000); // Sleep for 1 seconds before re-initializing the logger.
+    // == TRANSITION TO RUNNING GUEST OS ==
+    // Allocate and setup SVM structures
+    println!("Creating hypervisor...");
+    // let mut hv = Hypervisor::new()
+
+    println!("Configuring VM...");
+    // let mut vm = hv.create_vm
+
+    println!("Setting up guest memory...");
+    println!("Loading guest image...");
+    println!("Launching guest...");
 
     let mut executor = Executor::new();
     executor.spawn(Task::new(example_task()));

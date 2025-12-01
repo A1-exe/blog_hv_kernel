@@ -12,6 +12,7 @@ pub mod memory;
 pub mod serial;
 pub mod task;
 pub mod framebuffer;
+pub mod svm;
 
 extern crate alloc;
 pub mod allocator;
